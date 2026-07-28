@@ -8,10 +8,11 @@ updates:
       time: '03:00'
       timezone: Asia/Shanghai
     groups:
-      vitest:
-        patterns:
-          - vitest
-          - '@vitest/coverage-*'
+      development-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
     open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
@@ -21,4 +22,11 @@ updates:
       day: monday
       time: '03:30'
       timezone: Asia/Shanghai
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
     open-pull-requests-limit: 5
