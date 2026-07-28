@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    // Allow debugging to see source code
+    "sourceMap": true,
+    // Allow 'Go to Definition' to jump to source code
+    "declarationMap": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "examples", "**/*.test.ts"]
+}

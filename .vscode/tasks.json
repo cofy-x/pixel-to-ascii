@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Demo",
+      "type": "npm",
+      "script": "dev:demo",
+      "problemMatcher": [],
+      "detail": "Runs the examples/demo.ts script",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "Generate ASCII from Active File",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["dev:cli", "${file}"],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Generates ASCII art for the currently open file"
+    }
+  ]
+}
