@@ -13,6 +13,19 @@ updates:
         update-types:
           - minor
           - patch
+      development-major-updates:
+        dependency-type: development
+        update-types:
+          - major
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      production-major-updates:
+        dependency-type: production
+        update-types:
+          - major
     open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
@@ -29,4 +42,9 @@ updates:
         update-types:
           - minor
           - patch
+      github-actions-major-updates:
+        patterns:
+          - '*'
+        update-types:
+          - major
     open-pull-requests-limit: 5
