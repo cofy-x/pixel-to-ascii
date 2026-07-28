@@ -130,7 +130,7 @@ export async function generateAscii(
   } catch (err: unknown) {
     // Safer error handling than 'any'
     const errorMessage = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid source: ${errorMessage}`);
+    throw new Error(`Invalid source: ${errorMessage}`, { cause: err });
   }
 
   // 2. Process Loop
