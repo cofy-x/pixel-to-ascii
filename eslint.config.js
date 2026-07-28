@@ -7,7 +7,8 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
+import nodePlugin from 'eslint-plugin-n';
 import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
 import licenseHeader from 'eslint-plugin-license-header';
@@ -141,6 +142,7 @@ export default tseslint.config(
     plugins: {
       'license-header': licenseHeader,
       import: importPlugin,
+      n: nodePlugin,
     },
     rules: {
       'license-header/header': [
@@ -153,7 +155,7 @@ export default tseslint.config(
           ' */',
         ],
       ],
-      'import/enforce-node-protocol-usage': ['error', 'always'],
+      'n/prefer-node-protocol': 'error',
     },
   },
   // extra settings for scripts that we run directly with node
