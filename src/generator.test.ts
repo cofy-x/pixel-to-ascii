@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateAscii } from './generator.js';
 import fs from 'node:fs';
-import { Jimp } from 'jimp';
+import { Jimp, ResizeStrategy } from 'jimp';
 
 // --- Mocks ---
 // 1. Mock 'node:fs' to simulate file system operations
@@ -18,6 +18,10 @@ vi.mock('jimp', () => ({
   Jimp: {
     read: vi.fn(),
   },
+  ResizeStrategy: {
+    BILINEAR: 'bilinearInterpolation',
+    NEAREST_NEIGHBOR: 'nearestNeighbor',
+  },
 }));
 
 // Helper to create a mock Jimp image instance
@@ -25,11 +29,38 @@ const createMockImage = (
   width: number,
   height: number,
   colorAt: (x: number, y: number) => number = () => 0xffffffff,
-) => ({
-  bitmap: { width, height },
-  autocrop: vi.fn().mockReturnThis(), // allow chaining
-  getPixelColor: vi.fn(colorAt),
-});
+) => {
+  const image = {
+    bitmap: {
+      width,
+      height,
+      data: Buffer.alloc(width * height * 4, 0xff),
+    },
+    crop: vi.fn(({ w, h }: { x: number; y: number; w: number; h: number }) => {
+      image.bitmap.width = w;
+      image.bitmap.height = h;
+      image.bitmap.data = Buffer.alloc(w * h * 4, 0xff);
+      return image;
+    }),
+    resize: vi.fn(({ w }: { w: number; mode?: ResizeStrategy }) => {
+      image.bitmap.height = Math.round((image.bitmap.height * w) / width);
+      image.bitmap.width = w;
+      image.bitmap.data = Buffer.alloc(
+        image.bitmap.width * image.bitmap.height * 4,
+        0xff,
+      );
+      return image;
+    }),
+    getPixelColor: vi.fn(colorAt),
+  };
+
+  return image;
+};
+
+function stripAnsi(value: string): string {
+  const escape = String.fromCharCode(27);
+  return value.replaceAll(new RegExp(`${escape}\\[[0-9;]*m`, 'g'), '');
+}
 
 describe('generateAscii', () => {
   // Clear mocks after each test to ensure isolation
@@ -85,9 +116,10 @@ describe('generateAscii', () => {
 
       // Should check only png and jpg
       expect(results).toHaveLength(2);
-      expect(results.map((r) => r.source)).toEqual(
-        expect.arrayContaining(['images/icon.png', 'images/photo.jpg']),
-      );
+      expect(results.map((r) => r.source)).toEqual([
+        'images/icon.png',
+        'images/photo.jpg',
+      ]);
     });
 
     it('should process a URL', async () => {
@@ -186,8 +218,92 @@ describe('generateAscii', () => {
 
       const [result] = await generateAscii('transparent.png');
 
-      expect(result.ascii).toContain(' ▄');
+      expect(stripAnsi(result.ascii)).toContain(' ▄');
       expect(result.lineCount).toBe(1);
+    });
+
+    it('should always emit ANSI TrueColor sequences', async () => {
+      vi.mocked(Jimp.read).mockResolvedValue(
+        createMockImage(1, 1, () => 0x3366ccff) as unknown as Awaited<
+          ReturnType<typeof Jimp.read>
+        >,
+      );
+
+      const [result] = await generateAscii('color.png');
+
+      expect(result.ascii).toContain('\x1b[38;2;51;102;204m');
+    });
+
+    it('should treat low-alpha pixels as transparent', async () => {
+      vi.mocked(Jimp.read).mockResolvedValue(
+        createMockImage(2, 2, (x, y) =>
+          x === 1 && y === 0 ? 0x3366cc0f : 0x3366ccff,
+        ) as unknown as Awaited<ReturnType<typeof Jimp.read>>,
+      );
+
+      const [result] = await generateAscii('soft-edge.png');
+
+      expect(stripAnsi(result.ascii)).toBe('▀▄\n');
+    });
+
+    it('should crop transparent sides independently', async () => {
+      const image = createMockImage(4, 4, (x, y) =>
+        x >= 1 && x <= 2 && y >= 1 && y <= 2 ? 0x3366ccff : 0x00000000,
+      );
+      image.bitmap.data.fill(0);
+      for (let y = 1; y <= 2; y++) {
+        for (let x = 1; x <= 2; x++) {
+          const index = (y * 4 + x) * 4;
+          image.bitmap.data.set([0x33, 0x66, 0xcc, 0xff], index);
+        }
+      }
+      vi.mocked(Jimp.read).mockResolvedValue(
+        image as unknown as Awaited<ReturnType<typeof Jimp.read>>,
+      );
+
+      await generateAscii('transparent-border.png');
+
+      expect(image.crop).toHaveBeenCalledWith({
+        x: 1,
+        y: 1,
+        w: 2,
+        h: 2,
+      });
+    });
+
+    it('should keep an all-transparent image at the minimum size', async () => {
+      const image = createMockImage(4, 4, () => 0x00000000);
+      image.bitmap.data.fill(0);
+      vi.mocked(Jimp.read).mockResolvedValue(
+        image as unknown as Awaited<ReturnType<typeof Jimp.read>>,
+      );
+
+      const [result] = await generateAscii('empty.png', { width: 32 });
+
+      expect(image.crop).toHaveBeenCalledWith({ x: 0, y: 0, w: 1, h: 1 });
+      expect(image.resize).not.toHaveBeenCalled();
+      expect(result.lineCount).toBe(1);
+      expect(stripAnsi(result.ascii)).toBe(' \n');
+    });
+
+    it('should resize with nearest-neighbor when pixelated is enabled', async () => {
+      const image = createMockImage(20, 10);
+      vi.mocked(Jimp.read).mockResolvedValue(
+        image as unknown as Awaited<ReturnType<typeof Jimp.read>>,
+      );
+
+      const [result] = await generateAscii('pixel-art.png', {
+        width: 10,
+        pixelated: true,
+      });
+
+      expect(image.resize).toHaveBeenCalledWith({
+        w: 10,
+        mode: ResizeStrategy.NEAREST_NEIGHBOR,
+      });
+      expect(result.originalWidth).toBe(20);
+      expect(result.originalHeight).toBe(10);
+      expect(result.lineCount).toBe(3);
     });
 
     it('should render the final row of an odd-height image', async () => {
@@ -205,6 +321,24 @@ describe('generateAscii', () => {
   });
 
   describe('Error Handling', () => {
+    it('should reject invalid rendering options', async () => {
+      await expect(generateAscii('image.png', { width: 0 })).rejects.toThrow(
+        'width must be a positive integer',
+      );
+      await expect(
+        generateAscii('image.png', { alphaThreshold: 256 }),
+      ).rejects.toThrow('alphaThreshold must be an integer from 1 to 255');
+      await expect(
+        generateAscii('image.png', { pixelated: true }),
+      ).rejects.toThrow('pixelated requires width');
+      await expect(
+        generateAscii('image.png', { targetHeight: -1 }),
+      ).rejects.toThrow('targetHeight must be a positive integer');
+      await expect(
+        generateAscii('image.png', { minHeight: 10, maxHeight: 5 }),
+      ).rejects.toThrow('minHeight must be less than or equal to maxHeight');
+    });
+
     it('should handle Jimp read errors gracefully', async () => {
       vi.mocked(fs.statSync).mockReturnValue({
         isFile: () => true,
