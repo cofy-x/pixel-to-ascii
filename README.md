@@ -16,6 +16,7 @@ A lightweight TypeScript library and CLI for converting images into high-fidelit
 - ANSI TrueColor output with separate foreground and background colors.
 - Half-block rendering for two pixels per terminal row.
 - Automatic cropping of transparent borders.
+- Configurable output width, resampling mode, and alpha threshold.
 - Local file, directory, and HTTP(S) URL inputs.
 - Exact, minimum, and maximum output-height filters.
 - Terminal output or reusable ANSI text files.
@@ -62,17 +63,27 @@ Save and print at the same time:
 pixa ./image.png --output ./output --print
 ```
 
+Resize an image to a compact terminal width. Use nearest-neighbor scaling for
+pixel art:
+
+```sh
+pixa ./sprite.png --width 32 --pixelated --output ./output
+```
+
 ### Options
 
-| Option                     | Alias | Description                                                      |
-| -------------------------- | ----- | ---------------------------------------------------------------- |
-| `--target-height <number>` | `-t`  | Keep results with exactly this terminal line count.              |
-| `--min-height <number>`    | `-m`  | Keep results at or above this line count.                        |
-| `--max-height <number>`    | `-M`  | Keep results at or below this line count.                        |
-| `--output <path>`          | `-o`  | Save each result as an ANSI `.txt` file.                         |
-| `--print`                  | `-p`  | Print results even when `--output` is used.                      |
-| `--verbose`                | `-v`  | Report input discovery, skipped images, and processing failures. |
-| `--help`                   | `-h`  | Show CLI help.                                                   |
+| Option                     | Alias | Description                                                         |
+| -------------------------- | ----- | ------------------------------------------------------------------- |
+| `--width <number>`         | `-w`  | Resize to this many terminal columns while preserving aspect ratio. |
+| `--pixelated`              |       | Use nearest-neighbor resizing with `--width`.                       |
+| `--alpha-threshold <n>`    |       | Treat alpha values below `n` (1–255, default 16) as transparent.    |
+| `--target-height <number>` | `-t`  | Keep results with exactly this terminal line count.                 |
+| `--min-height <number>`    | `-m`  | Keep results at or above this line count.                           |
+| `--max-height <number>`    | `-M`  | Keep results at or below this line count.                           |
+| `--output <path>`          | `-o`  | Save each result as an ANSI `.txt` file.                            |
+| `--print`                  | `-p`  | Print results even when `--output` is used.                         |
+| `--verbose`                | `-v`  | Report input discovery, skipped images, and processing failures.    |
+| `--help`                   | `-h`  | Show CLI help.                                                      |
 
 An invalid local source exits with an error. Individual unreadable or unsupported images are skipped; enable `--verbose` to see those failures. A successful scan with no images matching the height filters is not an error.
 
@@ -112,6 +123,9 @@ const icons = await generateAscii('./images', {
 
 ```ts
 interface GenerateOptions {
+  width?: number;
+  pixelated?: boolean;
+  alphaThreshold?: number;
   targetHeight?: number;
   minHeight?: number;
   maxHeight?: number;
@@ -128,6 +142,8 @@ interface AsciiResult {
 ```
 
 When `targetHeight` is set, it takes precedence over `minHeight` and `maxHeight`. Per-image decoding failures are omitted from the returned array and reported only when `verbose` is enabled.
+
+`width` resizes the cropped image before rendering and preserves its aspect ratio. `pixelated` switches that resize to nearest-neighbor sampling and requires `width`. Pixels below `alphaThreshold` are cleared before cropping and rendering, preventing nearly invisible edge pixels from creating halos or extra blank rows. Generated `ascii` always contains ANSI TrueColor sequences, including when called from CI or redirected to a file. `originalWidth` and `originalHeight` continue to describe the decoded source image before cropping or resizing.
 
 ## Used by pokefetch
 

@@ -1,6 +1,6 @@
 {
   "name": "@cofy-x/pixel-to-ascii",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A lightweight, high-fidelity TypeScript library and CLI tool to convert images into ASCII art using ANSI TrueColor.",
   "engines": {
     "node": ">=20.0.0"

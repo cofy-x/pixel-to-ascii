@@ -6,7 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import chalk from 'chalk';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +18,16 @@ const packageJson = JSON.parse(
 );
 
 const program = new Command();
+
+function parseInteger(value: string): number {
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new InvalidArgumentError('Expected an integer.');
+  }
+
+  return parsed;
+}
 
 /**
  * Helper: Extract base filename from path or URL
@@ -39,6 +49,25 @@ function getBaseName(source: string): string {
   }
 }
 
+function getUniqueFileName(
+  source: string,
+  allocatedNames: Set<string>,
+): string {
+  const baseName = getBaseName(source);
+  let fileName = `${baseName}.txt`;
+  let suffix = 2;
+
+  while (allocatedNames.has(fileName.normalize('NFC').toLowerCase())) {
+    fileName = `${baseName}-${suffix}.txt`;
+    suffix++;
+  }
+
+  // Allocate conservatively so batches cannot overwrite on case-insensitive
+  // filesystems such as the default macOS and Windows configurations.
+  allocatedNames.add(fileName.normalize('NFC').toLowerCase());
+  return fileName;
+}
+
 program
   .name('pixa')
   .description('Convert images (File, Dir, URL) into high-fidelity ASCII art.')
@@ -46,12 +75,23 @@ program
   .usage('[options] <source>')
   .argument('[source]', 'Path to image file, directory, or URL')
   .option(
+    '-w, --width <number>',
+    'Resize output to this many terminal columns',
+    parseInteger,
+  )
+  .option('--pixelated', 'Use nearest-neighbor resizing with --width', false)
+  .option(
+    '--alpha-threshold <number>',
+    'Treat alpha values below this 1-255 threshold as transparent',
+    parseInteger,
+  )
+  .option(
     '-t, --target-height <number>',
     'Target height in lines (exact match only)',
-    parseInt,
+    parseInteger,
   )
-  .option('-m, --min-height <number>', 'Minimum height in lines', parseInt)
-  .option('-M, --max-height <number>', 'Maximum height in lines', parseInt)
+  .option('-m, --min-height <number>', 'Minimum height in lines', parseInteger)
+  .option('-M, --max-height <number>', 'Maximum height in lines', parseInteger)
   .option(
     '-o, --output <path>',
     'Output directory to save ASCII files (saves as .txt)',
@@ -71,6 +111,9 @@ program
     try {
       // 1. Execute Core Logic
       const results = await generateAscii(source, {
+        width: options.width,
+        pixelated: options.pixelated,
+        alphaThreshold: options.alphaThreshold,
         targetHeight: options.targetHeight,
         minHeight: options.minHeight,
         maxHeight: options.maxHeight,
@@ -109,9 +152,9 @@ program
         );
 
         let savedCount = 0;
+        const allocatedNames = new Set<string>();
         for (const res of results) {
-          const baseName = getBaseName(res.source);
-          const fileName = `${baseName}.txt`;
+          const fileName = getUniqueFileName(res.source, allocatedNames);
           const filePath = path.join(outputDir, fileName);
 
           // Write file (includes ANSI color codes)
@@ -147,7 +190,7 @@ program
               chalk.bold.white(`\n--- ${res.source} (H:${res.lineCount}) ---`),
             );
           }
-          console.log(res.ascii);
+          process.stdout.write(res.ascii);
         });
       }
     } catch (error: unknown) {
